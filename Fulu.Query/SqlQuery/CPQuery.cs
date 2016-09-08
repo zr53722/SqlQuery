@@ -2,7 +2,8 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Data;
-using System.Data.SqlClient;
+using System.Data.Common;
+using System.Diagnostics.CodeAnalysis;
 using System.Reflection;
 using System.Text;
 using Fulu.Query.Reflection;
@@ -25,49 +26,50 @@ using Fulu.Query.Reflection;
 namespace Fulu.Query.SqlQuery
 {
 
-	/// <summary>
-	/// 表示存SQL查询调用的封装
-	/// </summary>
-	/// <remarks>
-	/// <list type="bullet">
-	/// <item><description>CPQuery使用参数化查询SQL,可以通过匿名对象、SqlParameter数组的方式添加参数</description></item>
-	/// </list>
-	/// </remarks>
-	/// <example>
-	/// <para>下面的代码演示了通过拼接字符串参数,创建CPQuery对象实例的用法</para>
-	/// <code>
-	/// //字符串可以直接转换为CPQuery(需要引用using Mysoft.Map.Extensions.DAL命名空间)
-	/// //对于非字符串类型参数,可以直接用+拼接,例如Guid,Int,DateTime...
-	/// //对于字符串类型参数,需要调用AsQueryParameter()来进行拼接,否则就直接变为字符串了.
-	/// var query = "insert into TestTable(RowGuid, RowString) values(".AsCPQuery()
-	///         + Guid.NewGuid()
-	///         + "," + "dddddddddd".AsQueryParameter() + ")";
-	/// //执行命令
-	/// query.ExecuteNonQuery();
-	/// </code>
-	/// <para>下面的代码演示了通过匿名对象添加参数,创建CPQuery对象实例的用法</para>
-	/// <code>
-	/// //声明匿名类型
-	/// var product = new {
-	///		ProductName = "产品名称",
-	///		Quantity = 10
-	/// };
-	/// 
-	/// //SQL中的参数名就是@加匿名类型的属性名
-	/// CPQuery.From("INSERT INTO Products(ProductName, Quantity) VALUES(@ProductName, @Quantity)", product).ExecuteNonQuery();
-	/// </code>
-	/// <para>下面的代码演示了通过SqlParameter数组添加参数,创建CPQuery对象实例的用法</para>
-	/// <code>
-	/// //声明参数数组
-	/// SqlParameter[] parameters2 = new SqlParameter[2];
-	///	parameters2[0] = new SqlParameter("@ProductID", SqlDbType.Int);
-	///	parameters2[0].Value = newProductId;
-	///	parameters2[1] = new SqlParameter("@ProductName", SqlDbType.VarChar, 50);
-	///	parameters2[1].Value = "测试产品名";
-	///	//执行查询并返回实体
-	///	Products product = CPQuery.From("SELECT * FROM Products WHERE ProductID = @ProductID AND ProductName=@ProductName", parameters2).ToSingle&lt;Products&gt;();
-	/// </code>
-	/// </example>
+    /// <summary>
+    /// 表示存SQL查询调用的封装
+    /// </summary>
+    /// <remarks>
+    /// <list type="bullet">
+    /// <item><description>CPQuery使用参数化查询SQL,可以通过匿名对象、SqlParameter数组的方式添加参数</description></item>
+    /// </list>
+    /// </remarks>
+    /// <example>
+    /// <para>下面的代码演示了通过拼接字符串参数,创建CPQuery对象实例的用法</para>
+    /// <code>
+    /// //字符串可以直接转换为CPQuery
+    /// //对于非字符串类型参数,可以直接用+拼接,例如Guid,Int,DateTime...
+    /// //对于字符串类型参数,需要调用AsQueryParameter()来进行拼接,否则就直接变为字符串了.
+    /// var query = "insert into TestTable(RowGuid, RowString) values(".AsCPQuery()
+    ///         + GuidHelper.NewSeqGuid()
+    ///         + "," + "dddddddddd".AsQueryParameter() + ")";
+    /// //执行命令
+    /// query.ExecuteNonQuery();
+    /// </code>
+    /// <para>下面的代码演示了通过匿名对象添加参数,创建CPQuery对象实例的用法</para>
+    /// <code>
+    /// //声明匿名类型
+    /// var product = new {
+    ///		ProductName = "产品名称",
+    ///		Quantity = 10
+    /// };
+    /// 
+    /// //SQL中的参数名就是@加匿名类型的属性名
+    /// CPQuery.From("INSERT INTO Products(ProductName, Quantity) VALUES(@ProductName, @Quantity)", product).ExecuteNonQuery();
+    /// </code>
+    /// <para>下面的代码演示了通过SqlParameter数组添加参数,创建CPQuery对象实例的用法</para>
+    /// <code>
+    /// //声明参数数组
+    /// DbParameter[] parameters2 = new SqlParameter[2];
+    ///	parameters2[0] = new SqlParameter("@ProductID", SqlDbType.Int);
+    ///	parameters2[0].Value = newProductId;
+    ///	parameters2[1] = new SqlParameter("@ProductName", SqlDbType.VarChar, 50);
+    ///	parameters2[1].Value = "测试产品名";
+    ///	//执行查询并返回实体
+    ///	Products product = CPQuery.From("SELECT * FROM Products WHERE ProductID = @ProductID AND ProductName=@ProductName", parameters2).ToSingle&lt;Products&gt;();
+    /// </code>
+    /// </example>
+    [SuppressMessage("Microsoft.Design", "CA1001")]
 	public sealed class CPQuery : IDbExecute
 	{
 		private enum SPStep	// 字符串参数的处理进度
@@ -80,20 +82,21 @@ namespace Fulu.Query.SqlQuery
 		private int _count;
 		private StringBuilder _sb = new StringBuilder(512);
 
-		private SqlCommand _command = new SqlCommand();
+		private DbCommand _command = ProviderManager.CreateCommand();
 
 		/// <summary>
-		/// 获取当前CPQuery内部的SqlCommand对象
+		/// 获取当前CPQuery内部的DbCommand对象
 		/// </summary>
-		public SqlCommand Command
+		public DbCommand Command
 		{
-			get { return _command; }
+			get { return this._command; }
 		}
 
-		internal SqlCommand GetCommand()
+		[SuppressMessage("Microsoft.Security", "CA2100")]
+		internal DbCommand GetCommand()
 		{
-			_command.CommandText = _sb.ToString();
-			return _command;
+			this._command.CommandText = this._sb.ToString();
+			return this._command;
 		}
 
 		internal CPQuery(string text)
@@ -117,7 +120,7 @@ namespace Fulu.Query.SqlQuery
 		/// <returns>SQL语句</returns>
 		public override string ToString()
 		{
-			return _sb.ToString();
+			return this._sb.ToString();
 		}
 
 		
@@ -126,16 +129,18 @@ namespace Fulu.Query.SqlQuery
 			if( string.IsNullOrEmpty(s) )
 				return;
 
-			_sb.Append(s);
+			this._sb.Append(s);
 		}
 
 		private void AddParameter(QueryParameter p)
 		{
-			string name = "@p" + (_count++).ToString();
+			string name = "@p" + (this._count++).ToString();
 
-			_sb.Append(name);
+			this._sb.Append(name);
 
-			_command.Parameters.AddWithValue(name, p.Value);
+			DbParameter parameter = ProviderManager.CreateParameter(name, p.Value);
+
+			this._command.Parameters.Add(parameter);
 		}
 
 		/// <summary>
@@ -165,16 +170,22 @@ namespace Fulu.Query.SqlQuery
 
 			CPQuery query = new CPQuery(parameterizedSQL);
 
-			if( argsObject != null ) {
-				PropertyInfo[] properties = argsObject.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public);
-				foreach( PropertyInfo pInfo in properties ) {
-					object value = pInfo.FastGetValue(argsObject);
-					string name = "@" + pInfo.Name;
+		    if (argsObject != null)
+		    {
 
-					if( value == null || value == DBNull.Value ) {
-						query._command.Parameters.AddWithValue(name, DBNull.Value);
-					
-					}
+		        PropertyInfo[] properties = argsObject.GetType().GetProperties(BindingFlags.Instance | BindingFlags.Public);
+		        foreach (PropertyInfo pInfo in properties)
+		        {
+		            object value = pInfo.FastGetValue(argsObject);
+		            string name = "@" + pInfo.Name;
+
+		            if (value == null || value == DBNull.Value)
+		            {
+
+		                DbParameter parameter = ProviderManager.CreateParameter(name, DBNull.Value);
+		                query._command.Parameters.Add(parameter);
+
+		            }
                     else if (value is ICollection)
                     {
 
@@ -188,7 +199,7 @@ namespace Fulu.Query.SqlQuery
                         {
                             string paramName = string.Format("@_in_param_{0}", index);
 
-                            SqlParameter parameter = new SqlParameter(paramName, obj);
+                            DbParameter parameter = ProviderManager.CreateParameter(paramName, obj);
                             query._command.Parameters.Add(parameter);
 
                             if (bFirst)
@@ -212,53 +223,132 @@ namespace Fulu.Query.SqlQuery
 
                         query._sb.Replace(name, condation);
                     }
-					else {
-						SqlParameter parameter = value as SqlParameter;
-						if( parameter != null ) {
-							query._command.Parameters.Add(parameter);
-						}
-						else {
-							query._command.Parameters.AddWithValue(name, value);
-						}
-					}
-				}
-			}
+		            else
+		            {
+		                DbParameter parameter = value as DbParameter;
+		                if (parameter != null)
+		                {
+		                    query._command.Parameters.Add(parameter);
+		                }
+		                else
+		                {
+		                    parameter = ProviderManager.CreateParameter(name, value);
+		                    query._command.Parameters.Add(parameter);
+		                }
+		            }
+		        }
+		    }
 
-			return query;
+		    return query;
 		}
 
+        /// <summary>
+        /// 通过参数化SQL、哈希表的方式,创建CPQuery对象实例
+        /// </summary>
+        /// <param name="parameterizedSQL">参数化的SQL字符串</param>
+        /// <param name="dictionary">哈希表</param>
+        /// <returns>CPQuery对象实例</returns>
+	    public static CPQuery From(string parameterizedSQL, Dictionary<string, object> dictionary)
+	    {
+            if (string.IsNullOrEmpty(parameterizedSQL))
+                throw new ArgumentNullException("parameterizedSQL");
 
-		/// <summary>
-		/// 通过参数化SQL、SqlParameter数组的方式，创建CPQuery实例
-		/// </summary>
-		/// <example>
-		/// <para>下面的代码演示了通过参数化SQL、SqlParameter数组的方式，创建CPQuery实例的用法</para>
-		/// <code>
-		/// //声明参数数组
-		/// SqlParameter[] parameters2 = new SqlParameter[2];
-		/// parameters2[0] = new SqlParameter("@ProductID", SqlDbType.Int);
-		/// parameters2[0].Value = 0;
-		/// parameters2[1] = new SqlParameter("@ProductName", SqlDbType.VarChar, 50);
-		/// parameters2[1].Value = "测试产品名";
-		/// //执行查询并返回实体
-		/// Products product = CPQuery.From("SELECT * FROM Products WHERE ProductID = @ProductID AND ProductName=@ProductName", parameters2).ToSingle&lt;Products&gt;();
-		/// </code>
-		/// </example>
-		/// <param name="parameterizedSQL">参数化的SQL字符串</param>
-		/// <param name="parameters">SqlParameter参数数组</param>
-		/// <returns>CPQuery对象实例</returns>
-		public static CPQuery From(string parameterizedSQL, params SqlParameter[] parameters)
-		{
-			CPQuery query = new CPQuery(parameterizedSQL);
-			if( parameters != null ) {
-				query._command.Parameters.AddRange(parameters);
-			}
-			return query;
-		}
+            CPQuery query = new CPQuery(parameterizedSQL);
+
+	        if (dictionary != null)
+	        {
+                foreach (KeyValuePair<string, object> kvp in dictionary)
+                {
+                    string name = "@" + kvp.Key;
+
+                    DbParameter parameter;
+                    if (kvp.Value == null || kvp.Value == DBNull.Value)
+                    {
+                        parameter = ProviderManager.CreateParameter(name, DBNull.Value);
+                        query._command.Parameters.Add(parameter);
+                    }
+                    else if (kvp.Value is ICollection)
+                    {
+
+                        StringBuilder sb = new StringBuilder(128);
+                        sb.Append("(");
+
+                        bool bFirst = true;
+                        int index = 1;
+
+                        foreach (object obj in kvp.Value as ICollection)
+                        {
+                            string paramName = string.Format("@_in_param_{0}", index);
+
+                            parameter = ProviderManager.CreateParameter(paramName, obj);
+                            query._command.Parameters.Add(parameter);
+
+                            if (bFirst)
+                            {
+                                sb.Append(paramName);
+                                bFirst = false;
+                            }
+                            else
+                            {
+                                sb.AppendFormat(",{0}", paramName);
+                            }
+
+                            index++;
+                        }
+                        if (sb.Length == 1)
+                        {
+                            sb.Append("NULL");
+                        }
+                        sb.Append(")");
+                        string condation = sb.ToString();
+
+                        query._sb.Replace(name, condation);
+                    }
+                    else
+                    {
+                        parameter = ProviderManager.CreateParameter(name, kvp.Value);
+                        query._command.Parameters.Add(parameter);
+                    }
+                }
+	        }
+
+	        return query;
+	    }
+
+
+	    /// <summary>
+	    /// 通过参数化SQL、SqlParameter数组的方式，创建CPQuery实例
+	    /// </summary>
+	    /// <example>
+	    /// <para>下面的代码演示了通过参数化SQL、SqlParameter数组的方式，创建CPQuery实例的用法</para>
+	    /// <code>
+	    /// //声明参数数组
+	    /// SqlParameter[] parameters2 = new SqlParameter[2];
+	    /// parameters2[0] = new SqlParameter("@ProductID", SqlDbType.Int);
+	    /// parameters2[0].Value = 0;
+	    /// parameters2[1] = new SqlParameter("@ProductName", SqlDbType.VarChar, 50);
+	    /// parameters2[1].Value = "测试产品名";
+	    /// //执行查询并返回实体
+	    /// Products product = CPQuery.From("SELECT * FROM Products WHERE ProductID = @ProductID AND ProductName=@ProductName", parameters2).ToSingle&lt;Products&gt;();
+	    /// </code>
+	    /// </example>
+	    /// <param name="parameterizedSQL">参数化的SQL字符串</param>
+	    /// <param name="parameters">SqlParameter参数数组</param>
+	    /// <returns>CPQuery对象实例</returns>
+	    public static CPQuery From(string parameterizedSQL, params DbParameter[] parameters)
+	    {
+	        CPQuery query = new CPQuery(parameterizedSQL);
+	        if (parameters != null) {
+	            foreach (var p in parameters) {
+	                query._command.Parameters.Add(p);
+	            }
+	        }
+	        return query;
+	    }
 
 
 
-		/// <summary>
+	    /// <summary>
 		/// 通过SQL语句,创建CPQuery对象实例
 		/// </summary>
 		/// <example>
@@ -272,7 +362,7 @@ namespace Fulu.Query.SqlQuery
 		/// <returns>CPQuery对象实例</returns>
 		public static CPQuery From(string parameterizedSQL)
 		{
-			return From(parameterizedSQL, null);
+			return From(parameterizedSQL, (object)null);
 		}
 
 
@@ -307,46 +397,54 @@ namespace Fulu.Query.SqlQuery
 		/// <param name="query">CPQuery对象实例</param>
 		/// <param name="p">SqlParameter对象实例</param>
 		/// <returns>CPQuery对象实例</returns>
-		public static CPQuery operator +(CPQuery query, SqlParameter p)
+		public static CPQuery operator +(CPQuery query, DbParameter p)
 		{
 			query.AddSqlText(p.ParameterName);
 			query._command.Parameters.Add(p);
 			return query;
 		}
 
-		internal static CPQuery Format(string format, params object[] parameters)
-		{
-			if( string.IsNullOrEmpty(format) )
-				throw new ArgumentNullException("format");
+		//internal static CPQuery Format(string format, params object[] parameters)
+		//{
+		//	if( string.IsNullOrEmpty(format) )
+		//		throw new ArgumentNullException("format");
 
 
-			if( parameters == null || parameters.Length == 0 )
-				return format.AsCPQuery();
+		//	if( parameters == null || parameters.Length == 0 )
+		//		return format.AsCPQuery();
 
 
-			string[] arguments = new string[parameters.Length];
-			for( int i = 0; i < parameters.Length; i++ )
-				arguments[i] = "@p" + i.ToString();
+		//	string[] arguments = new string[parameters.Length];
+		//	for( int i = 0; i < parameters.Length; i++ )
+		//		arguments[i] = "@p" + i.ToString();
 
-			var query = string.Format(format, arguments).AsCPQuery();
+		//	var query = string.Format(format, arguments).AsCPQuery();
 
-			for(int i = 0; i < parameters.Length; i++) {
-				object value = parameters[i];
+		//	for(int i = 0; i < parameters.Length; i++) {
+		//		object value = parameters[i];
 
-				if( value == null || value == DBNull.Value ) {
-					query._command.Parameters.AddWithValue(arguments[i], DBNull.Value);
-					//SqlParameter paramter = new SqlParameter(arguments[i], DBNull.Value);
-					//paramter.SqlDbType = SqlDbType.Variant;
-					//query._command.Parameters.Add(paramter);
-					//throw new ArgumentException("输入参数的属性值不能为空。");
-				}
-				else {
-					query._command.Parameters.AddWithValue(arguments[i], value);
-				}
-			}
+		//		if( value == null || value == DBNull.Value ) {
 
-			return query;
-		}
+		//			DbParameter parameter = ProviderManager.CreateParameter(arguments[i], DBNull.Value);
+
+		//			query._command.Parameters.Add(parameter);
+
+		//			//query._command.Parameters.AddWithValue(arguments[i], DBNull.Value);
+		//			//SqlParameter paramter = new SqlParameter(arguments[i], DBNull.Value);
+		//			//paramter.SqlDbType = SqlDbType.Variant;
+		//			//query._command.Parameters.Add(paramter);
+		//			//throw new ArgumentException("输入参数的属性值不能为空。");
+		//		}
+		//		else {
+
+		//			DbParameter parameter = ProviderManager.CreateParameter(arguments[i], value);
+
+		//			query._command.Parameters.Add(parameter);
+		//		}
+		//	}
+
+		//	return query;
+		//}
 
 
 
@@ -381,12 +479,21 @@ namespace Fulu.Query.SqlQuery
 			return DbHelper.FillDataSet(this.GetCommand());
 		}
 
-		/// <summary>
-		/// 执行命令,返回第一行,第一列的值,并将结果转换为T类型
-		/// </summary>
-		/// <typeparam name="T">返回值类型</typeparam>
-		/// <returns>结果集的第一行,第一列</returns>
-		public T ExecuteScalar<T>()
+        /// <summary>
+        /// 执行命令,返回DbDataReader对象实例,关闭返回的DbReader并不会关闭数据库连接
+        /// </summary>
+        /// <returns>DbDataReader实例</returns>
+        public DbDataReader ExecuteReader()
+        {
+            return DbHelper.ExecuteReader(this.GetCommand());
+        }
+
+        /// <summary>
+        /// 执行命令,返回第一行,第一列的值,并将结果转换为T类型
+        /// </summary>
+        /// <typeparam name="T">返回值类型</typeparam>
+        /// <returns>结果集的第一行,第一列</returns>
+        public T ExecuteScalar<T>()
 		{
 			return DbHelper.ExecuteScalar<T>(this.GetCommand());
 		}
@@ -412,7 +519,7 @@ namespace Fulu.Query.SqlQuery
 		/// </example>
 		/// <typeparam name="T">实体类型</typeparam>
 		/// <returns>实体集合</returns>
-		public List<T> ToList<T>() where T : class, new()
+		public List<T> ToList<T>() where T : class
 		{
 			return DbHelper.ToList<T>(this.GetCommand());
 		}
@@ -427,7 +534,7 @@ namespace Fulu.Query.SqlQuery
 		///  TestDataType obj = "SELECT TOP 1 * FROM TestDataType".AsCPQuery().ToSingle&lt;TestDataType&gt;();
 		/// </code>
 		/// </example>
-		public T ToSingle<T>() where T : class, new()
+		public T ToSingle<T>() where T : class
 		{
 			return DbHelper.ToSingle<T>(this.GetCommand());
 		}
@@ -438,27 +545,27 @@ namespace Fulu.Query.SqlQuery
 
 	}
 
-	/// <summary>
-	/// 表示一个SQL参数对象
-	/// </summary>
-	/// <remarks>
-	/// <list type="bullet">
-	/// <item><description>string类型需要显示调用AsQueryParameter()扩展方法或通过通过强制类型转换的方式拼接,如:(QueryParameter)xxxx</description></item>
-	/// <item><description>其他类型直接通过+操作即可</description></item>
-	/// </list>
-	/// </remarks>
-	/// <example>
-	/// <para>下面的代码演示了QueryParameter类的用法</para>
-	/// <code>
-	/// //字符串可以直接转换为AsQueryParameter(需要引用using Mysoft.Map.Extensions.DAL命名空间)
-	/// var query = "insert into TestTable(RowGuid, RowString) values(".AsCPQuery()
-	///         + Guid.NewGuid() 
-	///         + "," + "dddddddddd".AsQueryParameter() + ")";
-	/// //执行命令
-	/// query.ExecuteNonQuery();
-	/// </code>
-	/// </example>
-	public sealed class QueryParameter
+    /// <summary>
+    /// 表示一个SQL参数对象
+    /// </summary>
+    /// <remarks>
+    /// <list type="bullet">
+    /// <item><description>string类型需要显示调用AsQueryParameter()扩展方法或通过通过强制类型转换的方式拼接,如:(QueryParameter)xxxx</description></item>
+    /// <item><description>其他类型直接通过+操作即可</description></item>
+    /// </list>
+    /// </remarks>
+    /// <example>
+    /// <para>下面的代码演示了QueryParameter类的用法</para>
+    /// <code>
+    /// //字符串可以直接转换为AsQueryParameter
+    /// var query = "insert into TestTable(RowGuid, RowString) values(".AsCPQuery()
+    ///         + GuidHelper.NewSeqGuid()
+    ///         + "," + "dddddddddd".AsQueryParameter() + ")";
+    /// //执行命令
+    /// query.ExecuteNonQuery();
+    /// </code>
+    /// </example>
+    public sealed class QueryParameter
 	{
 		private object _val;
 
@@ -468,7 +575,7 @@ namespace Fulu.Query.SqlQuery
 		/// <param name="val">要包装的参数值</param>
 		public QueryParameter(object val)
 		{
-			_val = val;
+			this._val = val;
 		}
 
 		/// <summary>
@@ -476,7 +583,7 @@ namespace Fulu.Query.SqlQuery
 		/// </summary>
 		public object Value
 		{
-			get { return _val; }
+			get { return this._val; }
 		}
 
 

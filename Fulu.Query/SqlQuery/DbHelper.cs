@@ -1,6 +1,7 @@
 ﻿using System;
 using System.Collections.Generic;
 using System.Data;
+using System.Data.Common;
 using System.Data.SqlClient;
 using Fulu.Query.Reflection;
 
@@ -8,7 +9,7 @@ namespace Fulu.Query.SqlQuery
 {
 	internal static class DbHelper
 	{
-		internal static int ExecuteNonQuery(SqlCommand command)
+        internal static int ExecuteNonQuery(DbCommand command)
 		{
 			using( ConnectionScope scope = new ConnectionScope() ) {
 				return scope.Current.ExecuteCommand<int>(
@@ -17,53 +18,75 @@ namespace Fulu.Query.SqlQuery
 					);
 			}
 		}
+        internal static DbDataReader ExecuteReader(DbCommand command)
+        {
+            using (ConnectionScope scope = new ConnectionScope())
+            {
+                return scope.Current.ExecuteCommand<DbDataReader>(
+                    command,
+                    cmd => cmd.ExecuteReader());
+            }
+        }
 
+        internal static DataTable FillDataTable(DbCommand command)
+        {
+            using (ConnectionScope scope = new ConnectionScope())
+            {
+                return scope.Current.ExecuteCommand<DataTable>(
+                    command,
+                    cmd =>
+                    {
+                        //using( DbDataReader reader = cmd.ExecuteReader() ) {
 
-		internal static DataTable FillDataTable(SqlCommand command)
-		{
-			using( ConnectionScope scope = new ConnectionScope() ) {
-				return scope.Current.ExecuteCommand<DataTable>(
-					command,
-					cmd => {
-						using( SqlDataReader reader = cmd.ExecuteReader() ) {
+                        //    //fix bug,必须要创建一个DataSet并把EnforceConstraints设置为False
+                        //    //否则在select * 连接查询时,包含两个时间戳字段将导致默认推断主键.
+                        //    //记录重复后会引发[System.Data.ConstraintException] = {"未能启用约束。一行或多行中包含违反非空、唯一或外键约束的值。"}异常
 
-							//fix bug,必须要创建一个DataSet并把EnforceConstraints设置为False
-							//否则在select * 连接查询时,包含两个时间戳字段将导致默认推断主键.
-							//记录重复后会引发[System.Data.ConstraintException] = {"未能启用约束。一行或多行中包含违反非空、唯一或外键约束的值。"}异常
+                        //    DataSet ds = new DataSet();
+                        //    ds.EnforceConstraints = false;
 
-							DataSet ds = new DataSet();
-							ds.EnforceConstraints = false;
+                        //    DataTable table = new DataTable("_tb");
+                        //    ds.Tables.Add(table);
 
-							DataTable table = new DataTable("_tb");
-							ds.Tables.Add(table);
+                        //    table.Load(reader);
+                        //    return table;
+                        //}
+                        DataTable table = new DataTable("_tb");
+                        DbDataAdapter da = ProviderManager.CreateDataAdapter();
+                        da.SelectCommand = command;
+                        da.Fill(table);
 
-							table.Load(reader);
-							return table;
-						}
-					}
-					);
-			}
-		}
+                        return table;
 
-		internal static DataSet FillDataSet(SqlCommand command)
-		{
-			using( ConnectionScope scope = new ConnectionScope() ) {
-				return scope.Current.ExecuteCommand<DataSet>(
-					command,
-					cmd => {
-						DataSet ds = new DataSet();
-						SqlDataAdapter adapter = new SqlDataAdapter(cmd);
-						adapter.Fill(ds);
-						for( int i = 0; i < ds.Tables.Count; i++ ) {
-							ds.Tables[i].TableName = "_tb" + i.ToString();
-						}
-						return ds;
-					}
-					);
-			}
-		}
+                    });
+            }
+        }
 
-		internal static T ExecuteScalar<T>(SqlCommand command)
+        internal static DataSet FillDataSet(DbCommand command)
+        {
+            using (ConnectionScope scope = new ConnectionScope())
+            {
+                return scope.Current.ExecuteCommand<DataSet>(
+                    command,
+                    cmd =>
+                    {
+                        DataSet ds = new DataSet();
+
+                        DbDataAdapter adapter = ProviderManager.CreateDataAdapter();
+                        adapter.SelectCommand = cmd;
+
+                        adapter.Fill(ds);
+                        for (int i = 0; i < ds.Tables.Count; i++)
+                        {
+                            ds.Tables[i].TableName = "_tb" + i.ToString();
+                        }
+                        return ds;
+                    }
+                    );
+            }
+        }
+
+        internal static T ExecuteScalar<T>(DbCommand command)
 		{
 			using( ConnectionScope scope = new ConnectionScope() ) {
 				return scope.Current.ExecuteCommand<T>(
@@ -89,25 +112,29 @@ namespace Fulu.Query.SqlQuery
 			return (T)Convert.ChangeType(obj, targetType);
 		}
 
-		internal static List<T> FillScalarList<T>(SqlCommand command)
-		{
-			using( ConnectionScope scope = new ConnectionScope() ) {
-				return scope.Current.ExecuteCommand<List<T>>(
-					command,
-					cmd => {
-						List<T> list = new List<T>();
-						using( SqlDataReader reader = cmd.ExecuteReader() ) {
-							while( reader.Read() ) {
-								list.Add(ConvertScalar<T>(reader[0]));
-							}
-							return list;
-						}
-					}
-					);
-			}
-		}
+        internal static List<T> FillScalarList<T>(DbCommand command)
+        {
+            using (ConnectionScope scope = new ConnectionScope())
+            {
+                return scope.Current.ExecuteCommand<List<T>>(
+                    command,
+                    cmd =>
+                    {
+                        List<T> list = new List<T>();
+                        using (DbDataReader reader = cmd.ExecuteReader())
+                        {
+                            while (reader.Read())
+                            {
+                                list.Add(ConvertScalar<T>(reader[0]));
+                            }
+                            return list;
+                        }
+                    }
+                    );
+            }
+        }
 
-		internal static List<T> ToList<T>(SqlCommand cmd) where T : class, new()
+        internal static List<T> ToList<T>(DbCommand cmd) where T : class
 		{
 			Type type = typeof(T);
 
@@ -115,7 +142,8 @@ namespace Fulu.Query.SqlQuery
 
 			using( ConnectionScope scope = new ConnectionScope() ) {
 				return scope.Current.ExecuteCommand<List<T>>(cmd, p => {
-					using( SqlDataReader reader = p.ExecuteReader() ) {
+                    using (DbDataReader reader = p.ExecuteReader())
+                    {
 						if( description.ExecuteFunc != null ) {
 							return description.ExecuteFunc(1, new object[] { reader }) as List<T>;
 						}
@@ -127,7 +155,7 @@ namespace Fulu.Query.SqlQuery
 			}
 		}
 
-		private static List<T> ToList<T>(SqlDataReader reader, TypeDescription description) where T : class, new()
+        private static List<T> ToList<T>(DbDataReader reader, TypeDescription description) where T : class
 		{
 			Type type = typeof(T);
 
@@ -155,7 +183,7 @@ namespace Fulu.Query.SqlQuery
 			return list;
 		}
 
-		internal static List<T> ToList<T>(DataTable table, TypeDescription description) where T : class, new()
+		internal static List<T> ToList<T>(DataTable table, TypeDescription description) where T : class
 		{
 			Type type = typeof(T);
 
@@ -181,7 +209,7 @@ namespace Fulu.Query.SqlQuery
 		}
 
 
-		internal static T ToSingle<T>(SqlCommand cmd) where T : class, new()
+        internal static T ToSingle<T>(DbCommand cmd) where T : class
 		{
 
 			Type type = typeof(T);
@@ -190,7 +218,8 @@ namespace Fulu.Query.SqlQuery
 
 			using( ConnectionScope scope = new ConnectionScope() ) {
 				return scope.Current.ExecuteCommand<T>(cmd, p => {
-					using( SqlDataReader reader = p.ExecuteReader() ) {
+                    using (DbDataReader reader = p.ExecuteReader())
+                    {
                         if( description.ExecuteFunc != null ) {
 							return description.ExecuteFunc(2, new object[] { reader }) as T;
                         }
@@ -202,7 +231,7 @@ namespace Fulu.Query.SqlQuery
 			}
 		}
 
-		private static T ToSingle<T>(SqlDataReader reader, TypeDescription description) where T : class, new()
+        private static T ToSingle<T>(DbDataReader reader, TypeDescription description) where T : class
         {
             Type type = typeof(T);
 
@@ -231,7 +260,7 @@ namespace Fulu.Query.SqlQuery
             }
         }
 
-		internal static string[] GetColumnNames(SqlDataReader reader)
+        internal static string[] GetColumnNames(DbDataReader reader)
 		{
 			int count = reader.FieldCount;
 			string[] names = new string[count];

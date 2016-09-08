@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Data.Common;
 
 namespace Fulu.Query.SqlQuery
@@ -80,6 +81,11 @@ namespace Fulu.Query.SqlQuery
 		/// </summary>
 		public static event EventHandler<ExceptionEventArgs> OnException;
 
+		/// <summary>
+		/// 为单元测试执行提供注入事件
+		/// </summary>
+		public static event EventHandler<MockEventArgs> MockExecute;
+
 		internal static void FireConnectionOpened(DbConnection conn)
 		{
 			EventHandler<ConnectionEventArgs> handler = ConnectionOpened;
@@ -90,22 +96,21 @@ namespace Fulu.Query.SqlQuery
 			}
 		}
 
-		internal static object FireBeforeExecute(DbCommand cmd)
+		internal static Hashtable FireBeforeExecute(DbCommand cmd)
 		{
-			object userData = null;
+		    Hashtable userData = null;
 			EventHandler<CommandEventArgs> handler = BeforeExecute;
 			if( handler != null ) {
 				CommandEventArgs arg = new CommandEventArgs();
-				arg.Command = cmd;
-				//arg.UserData = null;
-				handler(null, arg);
 
-				userData = arg.UserData;
-			}
+				arg.Command = cmd;
+                handler(null, arg);
+                userData = arg.InternalGetUserData();
+            }
 			return userData;
 		}
 
-		internal static void FireAfterExecute(DbCommand cmd, object data)
+		internal static void FireAfterExecute(DbCommand cmd, Hashtable data)
 		{
 			EventHandler<CommandEventArgs> handler = AfterExecute;
 			if( handler != null ) {
@@ -116,7 +121,7 @@ namespace Fulu.Query.SqlQuery
 			}
 		}
 
-		internal static void FireOnException(DbCommand cmd, System.Exception ex, object data)
+		internal static void FireOnException(DbCommand cmd, System.Exception ex, Hashtable data)
 		{
 			EventHandler<ExceptionEventArgs> handler = OnException;
 			if( handler != null ) {
@@ -126,6 +131,23 @@ namespace Fulu.Query.SqlQuery
 				arg.UserData = data;
 				handler(null, arg);
 			}
+		}
+
+		internal static object FireOnMockExecute(DbCommand cmd)
+		{
+			EventHandler<MockEventArgs> handler = MockExecute;
+
+			object mockResult = null;
+
+			if( handler != null ) {
+				MockEventArgs arg = new MockEventArgs();
+
+				handler(null, arg);
+
+				mockResult = arg.MockResult;
+			}
+
+			return mockResult;
 		}
 	}
 
@@ -147,15 +169,49 @@ namespace Fulu.Query.SqlQuery
 	/// </summary>
 	public class CommandEventArgs : EventArgs
 	{
-		/// <summary>
-		/// 执行的命令
-		/// </summary>
-		public DbCommand Command { get; internal set; }
+	    private Hashtable _userData;
 
-		/// <summary>
-		/// 用户自定义数据
-		/// </summary>
-		public object UserData { get; set; }
+
+	    /// <summary>
+        /// 执行的命令
+        /// </summary>
+        public DbCommand Command { get; internal set; }
+
+	    /// <summary>
+	    /// 用户自定义数据
+	    /// </summary>
+	    public Hashtable UserData
+	    {
+	        get
+	        {
+	            if (this._userData == null) {
+	                this._userData = new Hashtable();
+	            }
+	            return this._userData;
+	        }
+	        internal set { this._userData = value; }
+	    }
+
+        internal Hashtable InternalGetUserData()
+        {
+            return this._userData;
+        }
+    }
+
+    /// <summary>
+    /// 模拟EventArgs
+    /// </summary>
+	public class  MockEventArgs : EventArgs
+	{
+        /// <summary>
+        /// DbCommand
+        /// </summary>
+		public DbCommand Command { get; internal set; }
+        /// <summary>
+        /// 模拟结果
+        /// </summary>
+		public object MockResult { get; set; }
+
 	}
 
 	/// <summary>
@@ -175,6 +231,6 @@ namespace Fulu.Query.SqlQuery
 		/// <summary>
 		/// 用户自定义数据
 		/// </summary>
-		public object UserData { get; internal set; }
+		public Hashtable UserData { get; internal set; }
 	}
 }

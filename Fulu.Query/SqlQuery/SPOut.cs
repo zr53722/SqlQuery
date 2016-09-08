@@ -34,7 +34,7 @@ namespace Fulu.Query.SqlQuery
 		/// </summary>
 		public SPOut()
 		{
-			Size = -1;
+			this.Size = -1;
 		}
 		/// <summary>
 		/// 参数值

@@ -57,8 +57,10 @@
     <Compile Include="SqlQuery\EventManager.cs" />
     <Compile Include="SqlQuery\IDbExecute.cs" />
     <Compile Include="SqlQuery\Initializer.cs" />
+    <Compile Include="SqlQuery\ProviderManager.cs" />
     <Compile Include="SqlQuery\SPOut.cs" />
     <Compile Include="SqlQuery\StoreProcedure.cs" />
+    <Compile Include="SqlQuery\TransactionStackItem.cs" />
     <Compile Include="SqlQuery\TypeDescription.cs" />
   </ItemGroup>
   <Import Project="$(MSBuildToolsPath)\Microsoft.CSharp.targets" />
